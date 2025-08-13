@@ -22,7 +22,7 @@ jobs:
           submodules: true
           lfs: false
 
-      # Setup Node.js v20.12.0+ to meet dependency requirements and fix crypto.hash
+      # Setup Node.js v20.12.0+ to meet dependency requirements
       - name: Setup Node.js 20.12.0
         uses: actions/setup-node@v4
         with:
@@ -39,32 +39,66 @@ jobs:
           cd backend
           npm ci --omit=dev
 
-      # Install project dependencies with proper vite installation
+      # Install project dependencies
       - name: Install project dependencies
         run: |
           cd project
           npm ci
-          # Ensure vite is properly installed
-          npm install vite@latest --save-dev
 
-      # Build the application
-      - name: Build application
-        run: npm run build:all
+      # Build the frontend application
+      - name: Build frontend
+        run: |
+          cd project
+          npm run build
+
+      # Prepare backend for Azure Static Web Apps
+      - name: Prepare backend for deployment
+        run: |
+          mkdir -p project/dist/api
+          cp -r backend/* project/dist/api/
+          # Create a proper package.json for the API with all dependencies
+          cd project/dist/api
+          npm ci --omit=dev
+          # Remove node_modules from the copy to avoid conflicts
+          rm -rf node_modules
+          # Create a simple package.json that Azure can use
+          echo '{
+            "name": "speedtest-api",
+            "version": "1.0.0",
+            "main": "server.js",
+            "type": "module",
+            "scripts": {
+              "start": "node server.js"
+            },
+            "dependencies": {
+              "cluster": "^0.7.7",
+              "compression": "^1.7.4",
+              "cors": "^2.8.5",
+              "express": "^4.18.2",
+              "express-rate-limit": "^7.1.5",
+              "helmet": "^7.1.0",
+              "morgan": "^1.10.0",
+              "ws": "^8.18.2"
+            },
+            "engines": {
+              "node": ">=20.12.0"
+            }
+          }' > package.json
 
       # Deploy to Azure Static Web Apps
       - name: Build And Deploy
         id: builddeploy
-        uses: Azure/static-web-apps-deploy@v1.0.0
+        uses: Azure/static-web-apps-deploy@v1
         env:
           WEBSITE_NODE_DEFAULT_VERSION: '20.12.0'
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: "upload"
-          app_location: "./project/dist" # Built frontend location with explicit relative path
-          api_location: "./backend" # Backend API location with explicit relative path
+          app_location: "./project/dist" # Built frontend location
+          api_location: "./project/dist/api" # Backend API location
           output_location: "" # Empty since we're pointing directly to built content
-          skip_app_build: true # Skip build since we already built with npm run build:all
+          skip_app_build: true # Skip build since we already built the frontend
           deployment_environment: "Production"
 
   close_pull_request_job:
