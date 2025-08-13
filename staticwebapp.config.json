@@ -1,15 +1,8 @@
 {
   "routes": [
     {
-      "route": "/api/*",
-      "serve": "/api/*"
-    },
-    {
       "route": "/*",
       "serve": "/index.html"
     }
-  ],
-  "navigationFallback": {
-    "rewrite": "/index.html"
-  }
+  ]
 }
