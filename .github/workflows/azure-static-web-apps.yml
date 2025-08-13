@@ -59,9 +59,10 @@ jobs:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: "upload"
-          app_location: "/project/dist" # Built frontend location
-          api_location: "/backend" # Backend API location
-          output_location: "" # Built app content directory
+          app_location: "project/dist" # Built frontend location (no leading slash)
+          api_location: "backend" # Backend API location (no leading slash)
+          output_location: "dist" # Built app content directory
+          skip_app_build: true # Skip build since we already built with npm run build:all
 
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
