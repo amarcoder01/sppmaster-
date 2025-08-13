@@ -20,7 +20,7 @@ export default defineConfig({
   // Worker configuration to fix crypto.hash issues
   worker: {
     format: 'iife',
-    plugins: []
+    plugins: () => []
   },
   // Ensure build doesn't hang by setting explicit timeouts
   build: {

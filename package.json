@@ -1,6 +1,7 @@
 {
   "name": "speedtest-app",
   "version": "2.0.0",
+  "type": "module",
   "description": "Speed Test Application with React frontend and Cloudflare Pages Functions backend",
   "scripts": {
     "build": "cd project && npm ci && npm run build",
