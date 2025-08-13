@@ -9,6 +9,10 @@ class SpeedTestEngine {
   ];
 
   private getCurrentOrigin(): string {
+    // In development, always use the backend URL
+    if (import.meta.env.DEV) {
+      return 'http://localhost:3000';
+    }
     // Safe way to get current origin that works in all environments
     if (typeof window !== 'undefined' && window.location) {
       return window.location.origin;

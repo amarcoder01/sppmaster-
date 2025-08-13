@@ -22,6 +22,11 @@ import serverConfig from '../config/serverConfig';
 
 // Simplified servers list - Cloudflare automatically routes to nearest edge
 function getCurrentOrigin(): string {
+  // In development, use the backend server URL
+  if (import.meta.env.DEV) {
+    return 'http://localhost:3000';
+  }
+  
   // Safe way to get current origin that works in all environments
   if (typeof self !== 'undefined' && self.location) {
     return self.location.origin;

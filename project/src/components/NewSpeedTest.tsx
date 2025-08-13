@@ -124,7 +124,18 @@ const NewSpeedTest: React.FC<NewSpeedTestProps> = ({ onTestComplete }) => {
     tempEngine.dispose();
   }, []);
 
-  // Auto-start functionality completely disabled - manual start only
+  // Auto-start test when component mounts
+  useEffect(() => {
+    console.log('Auto-start useEffect triggered:', { autoStarted, isTestRunning, testResult });
+    if (!autoStarted && !isTestRunning && !testResult) {
+      console.log('Auto-starting speed test in 1 second...');
+      setAutoStarted(true);
+      setTimeout(() => {
+        console.log('Auto-start timeout triggered, calling startTest()');
+        startTest();
+      }, 1000);
+    }
+  }, [autoStarted, isTestRunning, testResult, startTest]);
 
   // Redirect to results page after test completion
   useEffect(() => {
