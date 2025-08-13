@@ -1,7 +1,12 @@
 # TODO:
 
-- [x] 1: Initialize git repository and add remote origin (priority: High)
-- [ ] 2: Add all files to git and create initial commit (**IN PROGRESS**) (priority: High)
-- [ ] 3: Push codebase to GitHub repository (priority: High)
-- [ ] 4: Install dependencies for the project (priority: Medium)
-- [ ] 5: Run the speedtest application (priority: Medium)
+- [x] 1: Create Azure Static Web Apps workflow file with Node.js v20 configuration (priority: High)
+- [x] 2: Configure workflow to install dependencies for both backend and project folders (priority: High)
+- [x] 3: Add npm run build:all command to workflow (priority: High)
+- [x] 6: Commit and push changes to GitHub repository (priority: High)
+- [x] 7: Update project/package.json engines field to require Node.js >=20.12.0 (priority: High)
+- [x] 8: Update root package.json engines field to require Node.js >=20.12.0 (priority: High)
+- [x] 9: Modify Azure workflow to explicitly use Node.js 20.x with setup-node action (priority: High)
+- [x] 4: Ensure vite is properly configured in the workflow (priority: Medium)
+- [x] 5: Test and validate the workflow configuration (priority: Medium)
+- [x] 10: Add WEBSITE_NODE_DEFAULT_VERSION environment variable to Azure workflow (priority: Medium)
