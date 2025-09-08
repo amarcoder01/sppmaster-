@@ -41,6 +41,19 @@ const servers: TestServer[] = [
   { id: 'local', name: 'Local Server', location: 'Custom Backend', host: 'http://localhost:3000', distance: 0 },
 ];
 
+// Helper: fetch with timeout using AbortController (works across more browsers)
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit & { timeoutMs?: number } = {}): Promise<Response> {
+  const { timeoutMs, signal, ...rest } = init as any;
+  const controller = new AbortController();
+  const timeout = typeof timeoutMs === 'number' ? timeoutMs : undefined;
+  const timer = timeout ? setTimeout(() => controller.abort(), timeout) : null;
+  try {
+    return await fetch(input, { ...(rest as RequestInit), signal: signal ?? controller.signal });
+  } finally {
+    if (timer) clearTimeout(timer as any);
+  }
+}
+
 // Worker state
 let config: TestConfig;
 let abortController: AbortController | null = null;
@@ -386,10 +399,10 @@ async function quickPing(url: string): Promise<number> {
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const start = performance.now();
-      const response = await fetch(pingUrl, { 
+      const response = await fetchWithTimeout(pingUrl, { 
         method: 'HEAD',
         cache: 'no-store',
-        signal: AbortSignal.timeout(TIMEOUT_MS)
+        timeoutMs: TIMEOUT_MS
       });
       const end = performance.now();
       
@@ -430,10 +443,10 @@ async function measurePing(): Promise<number> {
         const start = performance.now();
         
         // Use GET method to get timing information from the server
-        const response = await fetch(pingUrl, { 
+        const response = await fetchWithTimeout(pingUrl, { 
           method: 'GET',
           cache: 'no-store',
-          signal: AbortSignal.timeout(TIMEOUT_MS)
+          timeoutMs: TIMEOUT_MS
         });
         
         if (!response.ok) throw new Error(`Server returned ${response.status}`);
@@ -554,8 +567,8 @@ async function measureDownloadSpeed(): Promise<number> {
       const minGracePeriodMs = 1000; // Minimum 1 second grace period
       const dynamicGracePeriodEnabled = config.enableDynamicGracePeriod;
       
-      const response = await fetch(url, {
-        signal: AbortSignal.timeout((config.duration + (dynamicGracePeriodEnabled ? 5 : config.tcpGracePeriod)) * 1000), // Add grace period to timeout (use max 5s if dynamic)
+      const response = await fetchWithTimeout(url, {
+        timeoutMs: (config.duration + (dynamicGracePeriodEnabled ? 5 : config.tcpGracePeriod)) * 1000, // Add grace period to timeout (use max 5s if dynamic)
         cache: 'no-store'
       });
       
@@ -778,14 +791,14 @@ async function measureUploadSpeed(): Promise<number> {
         const uploadUrl = `${uploadEndpoint}?nocache=${Date.now()}-${connectionIndex}-${uploadIndex}`;
         
         try {
-          const response = await fetch(uploadUrl, {
+          const response = await fetchWithTimeout(uploadUrl, {
             method: 'POST',
             body: data,
             headers: {
               'Content-Type': 'application/octet-stream'
             },
-            signal: AbortSignal.timeout(3000), // 3 second timeout per chunk
-            cache: 'no-store'
+            cache: 'no-store',
+            timeoutMs: 3000 // 3 second timeout per chunk
           });
           
           if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);

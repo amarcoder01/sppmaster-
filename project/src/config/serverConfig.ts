@@ -15,47 +15,68 @@ interface ServerConfig {
   };
 }
 
-// Determine base URL based on environment
+// Determine base URL based on environment (works in window and worker contexts)
 const getBaseUrl = (): string => {
-  // Check for explicit environment variable first
+  // Explicit override takes precedence
   if (import.meta.env.VITE_API_BASE_URL) {
     return import.meta.env.VITE_API_BASE_URL;
   }
-  
-  // In production, check if we're on Render or Cloudflare
-  if (import.meta.env.PROD) {
-    // For Render deployment, use relative URLs since frontend and backend are served together
-    if (window.location.hostname.includes('onrender.com')) {
-      return ''; // Use relative URLs
+
+  // Helper to get current origin in any runtime
+  const getOrigin = () => {
+    // Browser window
+    if (typeof window !== 'undefined' && window.location) {
+      return window.location.origin;
     }
-    // For Cloudflare Pages, use the current origin
-    return window.location.origin;
+    // Web Worker
+    if (typeof self !== 'undefined' && (self as any).location) {
+      return (self as any).location.origin as string;
+    }
+    // Fallback
+    return '';
+  };
+
+  if (import.meta.env.PROD) {
+    const host = (typeof window !== 'undefined' ? window.location.hostname : (typeof self !== 'undefined' && (self as any).location ? (self as any).location.hostname : '')) as string;
+    // When co-hosted (Render Docker), prefer relative URLs
+    if (host && host.includes('onrender.com')) {
+      return '';
+    }
+    // Cloudflare Pages or other static hosts: use current origin if available
+    const origin = getOrigin();
+    return origin || '';
   }
-  
-  // Development fallback
+
+  // Development
   return 'http://localhost:3000';
 };
 
-// Determine WebSocket URL based on environment
+// Determine WebSocket URL based on environment (works in window and worker contexts)
 const getWebSocketUrl = (): string => {
-  // Check for explicit WebSocket URL
   if (import.meta.env.VITE_WS_URL) {
     return import.meta.env.VITE_WS_URL;
   }
-  
+
   const baseUrl = getBaseUrl();
-  
-  // In production, handle different platforms
+
+  const getOrigin = () => {
+    if (typeof window !== 'undefined' && window.location) return window.location.origin;
+    if (typeof self !== 'undefined' && (self as any).location) return (self as any).location.origin as string;
+    return '';
+  };
+
   if (import.meta.env.PROD) {
-    // For Render deployment, WebSocket is on the same domain
-    if (window.location.hostname.includes('onrender.com') || baseUrl === '') {
-      return window.location.origin.replace('https://', 'wss://').replace('http://', 'ws://');
+    const host = (typeof window !== 'undefined' ? window.location.hostname : (typeof self !== 'undefined' && (self as any).location ? (self as any).location.hostname : '')) as string;
+    // Co-hosted (Render): same origin
+    if ((host && host.includes('onrender.com')) || baseUrl === '') {
+      const origin = getOrigin();
+      return origin.replace('https://', 'wss://').replace('http://', 'ws://');
     }
-    // For Cloudflare Pages, use functions/websocket
+    // Cloudflare Pages: route to functions
     return baseUrl.replace('https://', 'wss://').replace('http://', 'ws://') + '/functions/websocket';
   }
-  
-  // Development fallback
+
+  // Development
   return 'ws://localhost:3000';
 };
 
