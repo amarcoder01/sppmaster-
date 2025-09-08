@@ -11,6 +11,7 @@ export enum WebSocketState {
 
 // WebSocket message types
 export enum MessageType {
+  CONNECTED = 'connected',
   PING = 'ping',
   PONG = 'pong',
   DOWNLOAD_START = 'download_start',

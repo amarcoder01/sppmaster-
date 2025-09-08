@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * WebSocket handler using Cloudflare Durable Objects
  * This replaces the traditional WebSocket server functionality
@@ -205,18 +206,137 @@ export { WebSocketState };
 
 // WebSocket upgrade endpoint
 export async function onRequestGET(context: any) {
-  const { request, env } = context;
-  
-  // Check if this is a WebSocket upgrade request
+  const { request } = context;
+
+  // Require WebSocket upgrade
   const upgradeHeader = request.headers.get('Upgrade');
   if (upgradeHeader !== 'websocket') {
     return new Response('Expected Upgrade: websocket', { status: 426 });
   }
-  
-  // Get Durable Object instance
-  const id = env.WEBSOCKET_STATE.idFromName('websocket-handler');
-  const stub = env.WEBSOCKET_STATE.get(id);
-  
-  // Forward the request to the Durable Object
-  return stub.fetch(request);
+
+  const pair = new WebSocketPair();
+  const [client, server] = Object.values(pair) as [WebSocket, WebSocket];
+
+  // Accept connection
+  // @ts-ignore - Cloudflare runtime
+  server.accept();
+
+  const clientId = (globalThis as any).crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+  const sessionInfo: any = {
+    id: clientId,
+    connectedAt: Date.now(),
+    lastActivity: Date.now(),
+    testPhase: null,
+    bytesTransferred: 0,
+    testStartTime: 0
+  };
+
+  // Send handshake
+  server.send(JSON.stringify({
+    type: 'connected',
+    clientId,
+    timestamp: Date.now(),
+    message: 'WebSocket connection established'
+  }));
+
+  // Message handling
+  server.addEventListener('message', (event: any) => {
+    try {
+      sessionInfo.lastActivity = Date.now();
+      const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+
+      switch (data?.type) {
+        case 'ping': {
+          const clientTimestamp = data.timestamp || Date.now();
+          const serverTimestamp = Date.now();
+          server.send(JSON.stringify({
+            type: 'pong',
+            clientTimestamp,
+            serverTimestamp,
+            serverProcessingTime: serverTimestamp - clientTimestamp
+          }));
+          break;
+        }
+        case 'download_start': {
+          const size = data.size || 1024 * 1024;
+          const chunkSize = data.chunkSize || 64 * 1024;
+          const safeSize = Math.min(size, 100 * 1024 * 1024);
+
+          sessionInfo.testPhase = 'download';
+          sessionInfo.bytesTransferred = 0;
+          sessionInfo.testStartTime = Date.now();
+
+          server.send(JSON.stringify({ type: 'download_started', timestamp: Date.now(), totalBytes: safeSize }));
+
+          const chunk = new Uint8Array(chunkSize);
+          for (let i = 0; i < chunkSize; i++) chunk[i] = (i * 31) & 255;
+
+          const sendNext = () => {
+            if (sessionInfo.bytesTransferred >= safeSize) {
+              const duration = (Date.now() - sessionInfo.testStartTime) / 1000;
+              const throughputMBps = (safeSize / (1024 * 1024)) / duration;
+              server.send(JSON.stringify({
+                type: 'download_complete',
+                timestamp: Date.now(),
+                bytesSent: safeSize,
+                duration: duration.toFixed(3),
+                throughputMBps: throughputMBps.toFixed(2)
+              }));
+              return;
+            }
+
+            const remaining = safeSize - sessionInfo.bytesTransferred;
+            const current = Math.min(chunkSize, remaining);
+            server.send(chunk.subarray(0, current));
+            sessionInfo.bytesTransferred += current;
+
+            if (sessionInfo.bytesTransferred % (1024 * 1024) === 0 || sessionInfo.bytesTransferred === safeSize) {
+              server.send(JSON.stringify({
+                type: 'download_progress',
+                timestamp: Date.now(),
+                bytesSent: sessionInfo.bytesTransferred,
+                totalBytes: safeSize,
+                progress: (sessionInfo.bytesTransferred / safeSize * 100).toFixed(1)
+              }));
+            }
+
+            setTimeout(sendNext, 0);
+          };
+
+          sendNext();
+          break;
+        }
+        case 'upload_start': {
+          sessionInfo.testPhase = 'upload';
+          sessionInfo.bytesTransferred = 0;
+          sessionInfo.testStartTime = Date.now();
+          server.send(JSON.stringify({ type: 'upload_ready', timestamp: Date.now() }));
+          break;
+        }
+        case 'upload_data': {
+          if (typeof data.byteLength === 'number') {
+            sessionInfo.bytesTransferred += data.byteLength;
+            server.send(JSON.stringify({
+              type: 'upload_ack',
+              timestamp: Date.now(),
+              bytesReceived: data.byteLength,
+              totalBytesReceived: sessionInfo.bytesTransferred
+            }));
+          }
+          break;
+        }
+        case 'test_complete': {
+          server.send(JSON.stringify({ type: 'test_complete_ack', timestamp: Date.now() }));
+          sessionInfo.testPhase = null;
+          break;
+        }
+        default:
+          break;
+      }
+    } catch (e) {
+      server.send(JSON.stringify({ type: 'error', message: 'Invalid message', timestamp: Date.now() }));
+    }
+  });
+
+  return new Response(null, { status: 101, webSocket: client });
 }

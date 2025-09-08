@@ -25,9 +25,7 @@ spec:
         imagePullPolicy: Always
         ports:
         - containerPort: 3000
-          name: backend
-        - containerPort: 5000
-          name: frontend
+          name: http
         resources:
           limits:
             cpu: "1"
@@ -71,31 +69,17 @@ spec:
       - name: logs
         persistentVolumeClaim:
           claimName: speedtest-logs-pvc
----
-apiVersion: v1
+-apiVersion: v1
 kind: Service
 metadata:
-  name: speedtest-backend
-spec:
-  selector:
-    app: speedtest-app
-  ports:
-  - port: 3000
-    targetPort: 3000
-    name: backend
-  type: ClusterIP
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: speedtest-frontend
+  name: speedtest-app
 spec:
   selector:
     app: speedtest-app
   ports:
   - port: 80
-    targetPort: 5000
-    name: frontend
+    targetPort: 3000
+    name: http
   type: LoadBalancer
 ---
 apiVersion: v1

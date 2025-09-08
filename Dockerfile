@@ -39,6 +39,9 @@ COPY --from=frontend-build /app/frontend/dist ./backend/public
 COPY docker-entrypoint.sh /
 RUN chmod +x /docker-entrypoint.sh
 
+# Install curl for healthchecks (used by docker-compose)
+RUN apk add --no-cache curl
+
 # Expose port for the unified server
 EXPOSE 10000
 

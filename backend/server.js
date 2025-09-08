@@ -45,7 +45,7 @@ const PORT = process.env.PORT || 3000;
 console.log(`Server will run on port ${PORT}`);
 
 // Determine if cluster mode should be enabled
-const ENABLE_CLUSTER = process.env.ENABLE_CLUSTER === 'true' || true;
+const ENABLE_CLUSTER = process.env.ENABLE_CLUSTER === 'true';
 
 // Track server performance metrics
 const serverStats = {

@@ -15,17 +15,6 @@ NODE_ENV = "production"
 RATE_LIMIT_WINDOW_MS = "60000"
 RATE_LIMIT_MAX_REQUESTS = "500"
 
-# Durable Objects for production
-[[env.production.durable_objects.bindings]]
-name = "WEBSOCKET_STATE"
-class_name = "WebSocketState"
-script_name = "websocket-worker"
-
-# KV namespace for production
-[[env.production.kv_namespaces]]
-binding = "SPEED_TEST_RESULTS"
-id = "your-kv-namespace-id"
-
 [env.preview]
 name = "speed-test-app-preview"
 
@@ -35,31 +24,8 @@ NODE_ENV = "preview"
 RATE_LIMIT_WINDOW_MS = "60000"
 RATE_LIMIT_MAX_REQUESTS = "500"
 
-# Durable Objects for preview
-[[env.preview.durable_objects.bindings]]
-name = "WEBSOCKET_STATE"
-class_name = "WebSocketState"
-script_name = "websocket-worker"
-
-# KV namespace for preview
-[[env.preview.kv_namespaces]]
-binding = "SPEED_TEST_RESULTS"
-preview_id = "your-preview-kv-namespace-id"
-
 # Default environment variables
 [vars]
 NODE_ENV = "development"
 RATE_LIMIT_WINDOW_MS = "60000"
 RATE_LIMIT_MAX_REQUESTS = "500"
-
-# Default Durable Objects
-[[durable_objects.bindings]]
-name = "WEBSOCKET_STATE"
-class_name = "WebSocketState"
-script_name = "websocket-worker"
-
-# Default KV namespace
-[[kv_namespaces]]
-binding = "SPEED_TEST_RESULTS"
-id = "your-kv-namespace-id"
-preview_id = "your-preview-kv-namespace-id"
