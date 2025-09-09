@@ -60,9 +60,9 @@ let abortController: AbortController | null = null;
 let graphData: GraphData[] = [];
 
 // Protocol overhead detection state
-let detectedProtocolOverheadFactor = 1.06; // Default value
+let detectedProtocolOverheadFactor = 1.0; // Use 1.0 to report goodput (application-level)
 let protocolOverheadSamples: number[] = []; // Samples collected during test
-let isProtocolOverheadDetected = false; // Flag to track if we've detected overhead
+let isProtocolOverheadDetected = false; // Disabled by default
 
 // WebSocket connection
 let webSocket: WebSocket | null = null;
@@ -457,12 +457,10 @@ async function measurePing(): Promise<number> {
         // Get the response data which includes server processing time
         const data = await response.json();
         
-        // If the server returned processing time, subtract it for more accurate latency
-        // This removes the server processing overhead from our measurement
-        const actualLatency = data.serverProcessingTime ? 
-          roundTripTime - data.serverProcessingTime : roundTripTime;
+        // Report RTT (goodput perspective); do not subtract server processing time to avoid negatives
+        const actualLatency = roundTripTime;
+        measurements.push(Math.max(0, actualLatency));
         
-        measurements.push(Math.max(0, actualLatency)); // Ensure we don't have negative values
         success = true;
       } catch (error) {
         console.warn(`Ping measurement ${i+1}/${NUM_SAMPLES}, attempt ${attempt+1}/${MAX_RETRIES+1} failed:`, error);
@@ -634,60 +632,21 @@ async function measureDownloadSpeed(): Promise<number> {
       if (!inGracePeriod) {
         measuredBytes += value.length;
         
-        // Protocol overhead detection
-        if (config.enableAutoProtocolOverhead && !isProtocolOverheadDetected) {
-            // Analyze HTTP response headers to detect protocol overhead
-            if (response.headers && !isProtocolOverheadDetected) {
-              try {
-                // Get content length if available
-                const contentLength = response.headers.get('content-length');
-                if (contentLength) {
-                  const declaredSize = parseInt(contentLength);
-                  // Calculate actual overhead based on response size vs declared content length
-                  // This accounts for TCP/IP and HTTP header overhead
-                  const actualSize = totalBytes;
-                  const overheadRatio = actualSize / declaredSize;
-                  
-                  // Only use reasonable values (between 1.01 and 1.2)
-                  if (overheadRatio > 1.01 && overheadRatio < 1.2) {
-                    protocolOverheadSamples.push(overheadRatio);
-                    console.log(`Protocol overhead sample: ${overheadRatio.toFixed(4)} (${protocolOverheadSamples.length}/3)`);
-                    
-                    // After collecting enough samples, calculate the average
-                    if (protocolOverheadSamples.length >= 3) {
-                      // Remove outliers if we have enough samples
-                      let filteredSamples = protocolOverheadSamples;
-                      if (protocolOverheadSamples.length >= 5) {
-                        filteredSamples = [...protocolOverheadSamples].sort((a, b) => a - b).slice(1, -1); // Remove highest and lowest
-                      }
-                      
-                      // Calculate average overhead factor
-                      detectedProtocolOverheadFactor = filteredSamples.reduce((sum, val) => sum + val, 0) / filteredSamples.length;
-                      isProtocolOverheadDetected = true;
-                      console.log(`Auto-detected protocol overhead factor: ${detectedProtocolOverheadFactor.toFixed(4)} (${((detectedProtocolOverheadFactor-1)*100).toFixed(2)}% overhead)`);
-                    }
-                  }
-                }
-              } catch (error) {
-                console.warn('Error during protocol overhead detection:', error);
-              }
-            }
-          }
+        // Disable protocol overhead detection; report application-level goodput
+        
         }
         
         if (now - lastUpdate > 100) {
           let currentSpeed;
           
-          // Use detected protocol overhead factor if auto-detection is enabled
-          const overheadFactor = (config.enableAutoProtocolOverhead && isProtocolOverheadDetected) 
-            ? detectedProtocolOverheadFactor 
-            : 1.06; // Default value if not detected yet or auto-detection disabled
+          // Use overhead factor 1.0 for goodput reporting
+          const overheadFactor = 1.0;
             
           if (inGracePeriod) {
             // During grace period, calculate speed but don't use it for final measurement
             currentSpeed = ((totalBytes * 8) / ((now - requestStart) / 1000) / 1000000) * overheadFactor;
           } else {
-            // After grace period, calculate speed based only on post-grace-period data
+            // After grace period, calculate based on measured data only
             currentSpeed = ((measuredBytes * 8) / ((now - measurementStartTime) / 1000) / 1000000) * overheadFactor;
           }
           
@@ -710,10 +669,8 @@ async function measureDownloadSpeed(): Promise<number> {
 
       const requestEnd = performance.now();
       
-      // Use detected protocol overhead factor if auto-detection is enabled
-      const overheadFactor = (config.enableAutoProtocolOverhead && isProtocolOverheadDetected) 
-        ? detectedProtocolOverheadFactor 
-        : config.protocolOverheadFactor;
+      // Use overhead factor 1.0 for goodput reporting
+      const overheadFactor = 1.0;
       
       // If the test completed before grace period ended, use total data
       if (measurementStartTime === 0) {
@@ -723,8 +680,8 @@ async function measureDownloadSpeed(): Promise<number> {
       
       // Otherwise, only use data after grace period for final measurement
       const measuredDuration = (requestEnd - measurementStartTime) / 1000;
-      // Apply protocol overhead compensation factor to account for HTTP/TCP/IP overhead
-      return ((measuredBytes * 8) / measuredDuration / 1000000) * overheadFactor;
+      // Report goodput without protocol overhead multiplier
+      return ((measuredBytes * 8) / measuredDuration / 1000000);
 
     } catch (error) {
       console.error('Download test error:', error);
