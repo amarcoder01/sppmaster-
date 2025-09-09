@@ -195,7 +195,16 @@ if (cluster.isPrimary && ENABLE_CLUSTER) {
   
   // Middleware
   app.use(helmet()); // Security headers
-  app.use(compression()); // Compress responses
+  // Disable compression for high-throughput test endpoints to avoid distorting results
+  app.use(compression({
+    filter: (req, res) => {
+      if (req.path.startsWith('/download') || req.path.startsWith('/upload')) {
+        return false;
+      }
+      // Use default filter for all other routes
+      return compression.filter(req, res);
+    }
+  }));
   app.use(cors());
   // Set up logging
   const logsDir = path.join(__dirname, 'logs');
@@ -300,9 +309,9 @@ if (cluster.isPrimary && ENABLE_CLUSTER) {
     });
   }
   
-  // Apply rate limiting to all routes except download/upload
+  // Apply rate limiting to all routes except download/upload/ping (avoid skewing test)
   app.use((req, res, next) => {
-    if (!req.path.includes('/download') && !req.path.includes('/upload')) {
+    if (!req.path.includes('/download') && !req.path.includes('/upload') && !req.path.includes('/ping')) {
       return apiLimiter(req, res, next);
     }
     next();
@@ -400,6 +409,8 @@ app.get('/download', (req, res) => {
   res.setHeader('Content-Disposition', 'attachment; filename="speedtest.bin"');
   res.setHeader('Transfer-Encoding', 'chunked'); // Use chunked encoding for better streaming
   res.setHeader('X-Content-Type-Options', 'nosniff');
+  // Best-effort: discourage proxy buffering
+  res.setHeader('X-Accel-Buffering', 'no');
   
   // Add performance tracking headers
   res.setHeader('X-Download-Start-Time', Date.now().toString());
@@ -494,6 +505,8 @@ app.post('/upload', (req, res) => {
   // Set headers for better client performance
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Upload-Start-Time', Date.now().toString());
+  // Best-effort: discourage proxy buffering
+  res.setHeader('X-Accel-Buffering', 'no');
   
   // For high-speed uploads, we need to efficiently process the incoming stream
   // rather than waiting for the entire payload to be buffered
@@ -662,7 +675,7 @@ wss.on('connection', (ws, req) => {
     message: 'WebSocket connection established'
   }));
   
-  // Handle incoming messages
+  // Handle incoming messages (text JSON or binary)
   ws.on('message', (message) => {
     try {
       const clientInfo = activeConnections.get(ws);
@@ -671,7 +684,22 @@ wss.on('connection', (ws, req) => {
       // Update last activity timestamp
       clientInfo.lastActivity = Date.now();
       
-      // Parse message
+      // If binary frame received during upload phase, count bytes directly
+      if (Buffer.isBuffer(message)) {
+        if (clientInfo.testPhase === 'upload') {
+          const bytes = message.length;
+          clientInfo.bytesTransferred += bytes;
+          ws.send(JSON.stringify({
+            type: 'upload_ack',
+            timestamp: Date.now(),
+            bytesReceived: bytes,
+            totalBytesReceived: clientInfo.bytesTransferred
+          }));
+        }
+        return; // Binary frame handled
+      }
+
+      // Parse JSON message
       const data = JSON.parse(message.toString());
       
       // Handle different message types
@@ -700,11 +728,10 @@ wss.on('connection', (ws, req) => {
           break;
           
         case 'upload_data':
-          // Handle binary upload data
+          // Metadata message from client about a recent binary chunk
           if (clientInfo.testPhase === 'upload' && data.byteLength) {
-            clientInfo.bytesTransferred += data.byteLength;
-            
-            // Send acknowledgment
+            // We already count actual binary frames above; ensure totals are consistent
+            // Do not double count here; only send an ACK echo if needed
             ws.send(JSON.stringify({
               type: 'upload_ack',
               timestamp: Date.now(),
